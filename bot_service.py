@@ -53,19 +53,21 @@ def send_telegram_order(config: dict, table_number: str, items: list) -> dict:
     # Calculate total items
     total_count = sum(item.get("count", 1) for item in items)
 
-    # Format message strictly as requested:
-    # стол: (номер) (время)
-    # заказ: (заказы)
+    # Minimalist yet visually clear and aesthetic format
     time_str = datetime.now().strftime("%H:%M")
     
-    dish_list = []
+    dish_lines = []
     for it in items:
         name = it.get('dish_name') or format_dish_name(it.get('filename', 'Блюдо'))
         cnt = it.get('count', 1)
-        dish_list.append(f"{name} ({cnt} шт.)")
+        dish_lines.append(f"• <b>{name}</b> — <b>{cnt} шт.</b>")
 
-    dishes_text = ", ".join(dish_list)
-    message_text = f"стол: {table_number} ({time_str})\nзаказ: {dishes_text}"
+    items_block = "\n".join(dish_lines)
+    message_text = (
+        f"🛎 <b>Стол:</b> <code>№ {table_number}</code>   🕒 <b>{time_str}</b>\n\n"
+        f"📋 <b>Заказ:</b>\n"
+        f"{items_block}"
+    )
 
     # Check if bot is configured
     if not bot_token or "YOUR_TELEGRAM" in bot_token or not chat_id or "YOUR_TELEGRAM" in chat_id:
