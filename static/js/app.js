@@ -1,121 +1,126 @@
 /**
- * Лукоморье — Меню ресторана
- * Клиентская логика: парсинг номера стола из URL, фильтрация блюд,
- * управление корзиной и отправка заказа в Telegram.
+ * Лукоморье — Меню заведения
+ * Автоматический столик из ссылки (без вопросов), быстрый рендеринг,
+ * мобильная адаптация и отправка заказов в Telegram.
  */
 
-// Состояние приложения
 const state = {
   tableNumber: null,
   activeCategory: 'all',
   menuItems: [],
-  cart: {}, // key: item.id -> { item, count }
-  config: null
+  cart: {} // id -> { item, count }
 };
 
 // ==========================================================================
-// 1. Инициализация и парсинг URL
+// 1. Извлечение номера стола из ссылки (БЕЗ ВОПРОСОВ)
+// Поддерживает:
+// - http://domain/?1
+// - http://domain/?5
+// - http://domain/1
+// - http://domain/5
+// - http://domain/?table=2
+// - http://domain/#1
 // ==========================================================================
 
-function parseTableFromUrl() {
-  const search = window.location.search; // Например: "?1", "?5", "?table=3"
-  if (!search) return null;
+function getTableFromURL() {
+  // 1. Проверяем query: ?1 или ?table=1
+  const search = window.location.search.replace(/^\?/, '').trim();
+  if (search) {
+    if (/^\d+$/.test(search)) return search;
+    const matchBare = search.match(/^(\d+)/);
+    if (matchBare) return matchBare[1];
 
-  const raw = search.substring(1).trim(); // убираем "?"
-  if (!raw) return null;
-
-  // Случай 1: ссылка вида /?1 или /?12
-  if (/^\d+$/.test(raw)) {
-    return raw;
-  }
-
-  // Случай 2: ссылка вида /?1= (часто генерируется браузером для пустых параметров)
-  if (/^(\d+)=?$/.test(raw)) {
-    const match = raw.match(/^(\d+)/);
-    if (match) return match[1];
-  }
-
-  // Случай 3: ссылка вида /?table=1 или /?stol=2 или /?t=3
-  const urlParams = new URLSearchParams(search);
-  for (const key of ['table', 'stol', 't', 'table_id', 'n']) {
-    if (urlParams.has(key)) {
-      const val = urlParams.get(key);
-      if (val && /^\d+$/.test(val.trim())) {
-        return val.trim();
-      }
+    const params = new URLSearchParams(window.location.search);
+    for (const k of ['table', 'stol', 't', 'n']) {
+      const val = params.get(k);
+      if (val && /^\d+$/.test(val.trim())) return val.trim();
     }
   }
 
-  // Если первый ключ является числом (например ?3&other=val)
-  for (const [key] of urlParams.entries()) {
-    if (/^\d+$/.test(key.trim())) {
-      return key.trim();
-    }
+  // 2. Проверяем path: /1 или /2
+  const pathParts = window.location.pathname.split('/').filter(Boolean);
+  if (pathParts.length > 0) {
+    const lastPart = pathParts[pathParts.length - 1];
+    if (/^\d+$/.test(lastPart)) return lastPart;
   }
+
+  // 3. Проверяем hash: #1 или #table=1
+  const hash = window.location.hash.replace(/^#/, '').trim();
+  if (/^\d+$/.test(hash)) return hash;
 
   return null;
 }
 
-function updateTableUI() {
-  const badge = document.getElementById('tableBadge');
-  const banner = document.getElementById('noTableBanner');
-  const modalBadge = document.getElementById('modalTableBadge');
+function initTableNumber() {
+  state.tableNumber = getTableFromURL();
+
+  const headerTableEl = document.getElementById('headerTableNum');
+  const modalTableBadge = document.getElementById('modalTableBadge');
 
   if (state.tableNumber) {
-    badge.className = 'status-badge badge-table-ok';
-    badge.innerHTML = `<span class="badge-icon">📍</span><span class="badge-label">Столик: <b>№ ${state.tableNumber}</b></span>`;
-    banner.classList.add('hidden');
-    if (modalBadge) modalBadge.textContent = `Столик № ${state.tableNumber}`;
+    if (headerTableEl) headerTableEl.textContent = `№ ${state.tableNumber}`;
+    if (modalTableBadge) modalTableBadge.textContent = `Столик № ${state.tableNumber}`;
   } else {
-    badge.className = 'status-badge badge-warning';
-    badge.innerHTML = `<span class="badge-icon">⚠️</span><span class="badge-label">Стол: <b>не указан</b></span>`;
-    banner.classList.remove('hidden');
-    if (modalBadge) modalBadge.textContent = 'Стол не указан!';
+    // Если столик не был передан в ссылке, просто указываем нейтральный статус
+    if (headerTableEl) headerTableEl.textContent = `не указан`;
+    if (modalTableBadge) modalTableBadge.textContent = `Столик не указан`;
   }
 }
 
 // ==========================================================================
-// 2. Загрузка меню из API
+// 2. Загрузка меню (Мгновенно из кэша + фоновое обновление)
 // ==========================================================================
 
-async function fetchConfig() {
-  try {
-    const res = await fetch('/api/config');
-    state.config = await res.json();
-  } catch (err) {
-    console.error('Ошибка загрузки конфигурации:', err);
-  }
-}
-
-async function fetchMenu() {
+async function loadMenu() {
   const loadingEl = document.getElementById('loadingState');
-  const emptyEl = document.getElementById('emptyState');
-  const gridEl = document.getElementById('menuGrid');
+  
+  // 1. Проверяем локальный кэш для моментального показа
+  const cached = localStorage.getItem('lukomorie_menu_cache');
+  if (cached) {
+    try {
+      const items = JSON.parse(cached);
+      if (Array.isArray(items) && items.length > 0) {
+        state.menuItems = items;
+        if (loadingEl) loadingEl.classList.add('hidden');
+        renderMenu();
+      }
+    } catch (e) {
+      console.warn('Cache parse error', e);
+    }
+  }
 
-  loadingEl.classList.remove('hidden');
-  gridEl.innerHTML = '';
-
+  // 2. Запрашиваем свежие данные с сервера
   try {
-    const res = await fetch('/api/menu');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const res = await fetch('/api/menu', { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     state.menuItems = data.items || [];
-    loadingEl.classList.add('hidden');
+    
+    // Сохраняем в кэш
+    localStorage.setItem('lukomorie_menu_cache', JSON.stringify(state.menuItems));
 
+    if (loadingEl) loadingEl.classList.add('hidden');
     renderMenu();
   } catch (err) {
-    loadingEl.classList.add('hidden');
-    gridEl.innerHTML = `<div class="empty-state"><p>Ошибка загрузки меню. Проверьте соединение с сервером.</p></div>`;
-    console.error('Ошибка загрузки меню:', err);
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (!state.menuItems || state.menuItems.length === 0) {
+      const grid = document.getElementById('menuGrid');
+      grid.innerHTML = `<div class="empty-state"><p>Не удалось загрузить меню. Проверьте соединение с сервером.</p></div>`;
+    }
   }
 }
 
 // ==========================================================================
-// 3. Рендеринг блюд
-// Согласно требованию: НАЗВАНИЯ БЛЮД НЕ ПОКАЗЫВАЮТСЯ, только фото, кол-во и кнопка
+// 3. Рендеринг блюд (НАЗВАНИЙ НЕТ, только аппетитные фото, кол-во и кнопка)
 // ==========================================================================
 
-function getCategoryRussianName(catKey) {
-  switch (catKey) {
+function getCategoryName(cat) {
+  switch (cat) {
     case 'meat': return 'Мясное';
     case 'fish': return 'Рыбное';
     case 'other': return 'Прочее';
@@ -124,7 +129,7 @@ function getCategoryRussianName(catKey) {
 }
 
 function renderMenu() {
-  const gridEl = document.getElementById('menuGrid');
+  const grid = document.getElementById('menuGrid');
   const emptyEl = document.getElementById('emptyState');
 
   const filtered = state.menuItems.filter(item => {
@@ -134,30 +139,30 @@ function renderMenu() {
 
   if (filtered.length === 0) {
     emptyEl.classList.remove('hidden');
-    gridEl.innerHTML = '';
+    grid.innerHTML = '';
     return;
   }
 
   emptyEl.classList.add('hidden');
 
-  gridEl.innerHTML = filtered.map(item => {
-    const categoryName = getCategoryRussianName(item.category);
+  grid.innerHTML = filtered.map(item => {
+    const catTitle = getCategoryName(item.category);
     return `
       <article class="dish-card" data-id="${item.id}">
-        <div class="dish-media" onclick="openLightbox('${item.image_url}')" title="Нажмите, чтобы приблизить фото">
-          <span class="category-tag">${categoryName}</span>
-          <img src="${item.image_url}" alt="Блюдо" loading="lazy" onerror="this.src='/static/img/placeholder.svg'">
+        <div class="dish-media" onclick="openLightbox('${item.image_url}')">
+          <span class="category-tag">${catTitle}</span>
+          <img src="${item.image_url}" alt="Фото блюда" loading="lazy" onerror="this.src='/static/img/placeholder.svg'">
           <div class="zoom-overlay">🔍</div>
         </div>
 
         <div class="dish-controls">
           <div class="quantity-stepper">
-            <button class="step-btn" onclick="adjustCardQty('${item.id}', -1)" aria-label="Уменьшить">-</button>
+            <button type="button" class="step-btn" onclick="adjustCardQty('${item.id}', -1)" aria-label="Меньше">-</button>
             <span class="step-value" id="qty-${item.id}">1</span>
-            <button class="step-btn" onclick="adjustCardQty('${item.id}', 1)" aria-label="Увеличить">+</button>
+            <button type="button" class="step-btn" onclick="adjustCardQty('${item.id}', 1)" aria-label="Больше">+</button>
           </div>
 
-          <button class="btn-order-action" id="btn-add-${item.id}" onclick="addToCart('${item.id}')">
+          <button type="button" class="btn-order-action" id="btn-add-${item.id}" onclick="addToCart('${item.id}')">
             <span>В заказ</span>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
@@ -169,9 +174,8 @@ function renderMenu() {
   }).join('');
 }
 
-// Регулировка количества на карточке
-window.adjustCardQty = function(itemId, delta) {
-  const el = document.getElementById(`qty-${itemId}`);
+window.adjustCardQty = function(id, delta) {
+  const el = document.getElementById(`qty-${id}`);
   if (!el) return;
   let val = parseInt(el.textContent, 10) || 1;
   val = Math.max(1, Math.min(20, val + delta));
@@ -182,75 +186,54 @@ window.adjustCardQty = function(itemId, delta) {
 // 4. Корзина и заказ
 // ==========================================================================
 
-window.addToCart = function(itemId) {
-  // Проверка столика: если столика нет, предлагаем указать
-  if (!state.tableNumber) {
-    showToast('⚠️ Укажите номер вашего столика для заказа!');
-    openModal('tablePromptModal');
-    return;
-  }
-
-  const item = state.menuItems.find(i => i.id === itemId);
+window.addToCart = function(id) {
+  const item = state.menuItems.find(i => i.id === id);
   if (!item) return;
 
-  const qtyEl = document.getElementById(`qty-${itemId}`);
-  const countToAdd = parseInt(qtyEl ? qtyEl.textContent : 1, 10) || 1;
+  const qtyEl = document.getElementById(`qty-${id}`);
+  const count = parseInt(qtyEl ? qtyEl.textContent : 1, 10) || 1;
 
-  if (state.cart[itemId]) {
-    state.cart[itemId].count += countToAdd;
+  if (state.cart[id]) {
+    state.cart[id].count += count;
   } else {
-    state.cart[itemId] = {
-      item: item,
-      count: countToAdd
-    };
+    state.cart[id] = { item, count };
   }
 
   // Анимация кнопки
-  const btn = document.getElementById(`btn-add-${itemId}`);
+  const btn = document.getElementById(`btn-add-${id}`);
   if (btn) {
-    const originalText = btn.innerHTML;
+    const orig = btn.innerHTML;
     btn.classList.add('added');
     btn.innerHTML = `<span>Добавлено ✓</span>`;
     setTimeout(() => {
       btn.classList.remove('added');
-      btn.innerHTML = originalText;
-    }, 1200);
+      btn.innerHTML = orig;
+    }, 900);
   }
 
-  // Сбрасываем счетчик карточки на 1
   if (qtyEl) qtyEl.textContent = '1';
-
   updateCartUI();
-  showToast(`Позиция добавлена в заказ!`);
+  showToast('Позиция добавлена в заказ');
 };
 
 function updateCartUI() {
-  const cartEntries = Object.values(state.cart);
-  const totalCount = cartEntries.reduce((sum, entry) => sum + entry.count, 0);
+  const entries = Object.values(state.cart);
+  const totalCount = entries.reduce((s, e) => s + e.count, 0);
 
-  const floatingBar = document.getElementById('floatingCart');
+  const bar = document.getElementById('floatingCart');
   const countBadge = document.getElementById('cartCountBadge');
-  const summaryEl = document.getElementById('cartSummary');
+  const summary = document.getElementById('cartSummary');
 
-  countBadge.textContent = totalCount;
-  summaryEl.textContent = `${totalCount} ${pluralizeDishes(totalCount)} выбрано`;
+  if (countBadge) countBadge.textContent = totalCount;
+  if (summary) summary.textContent = `${totalCount} блюд выбрано`;
 
   if (totalCount > 0) {
-    floatingBar.classList.add('visible');
+    bar.classList.add('visible');
   } else {
-    floatingBar.classList.remove('visible');
+    bar.classList.remove('visible');
   }
 
   renderCartDrawer();
-}
-
-function pluralizeDishes(n) {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 19) return 'позиций';
-  if (mod10 === 1) return 'позиция';
-  if (mod10 >= 2 && mod10 <= 4) return 'позиции';
-  return 'позиций';
 }
 
 function renderCartDrawer() {
@@ -278,20 +261,20 @@ function renderCartDrawer() {
 
   listEl.innerHTML = entries.map(([id, entry]) => {
     totalItemsCount += entry.count;
-    const catName = getCategoryRussianName(entry.item.category);
+    const catName = getCategoryName(entry.item.category);
     return `
       <div class="cart-item-row">
         <img class="cart-thumb" src="${entry.item.image_url}" alt="Фото">
         <div class="cart-item-meta">
           <div class="cart-category-label">${catName}</div>
-          <div class="cart-count-label">Количество: <b>${entry.count} шт.</b></div>
+          <div class="cart-count-label">Кол-во: <b>${entry.count} шт.</b></div>
         </div>
         <div class="cart-item-stepper">
-          <button onclick="updateCartItemQty('${id}', -1)">-</button>
+          <button type="button" onclick="updateCartItemQty('${id}', -1)">-</button>
           <span>${entry.count}</span>
-          <button onclick="updateCartItemQty('${id}', 1)">+</button>
+          <button type="button" onclick="updateCartItemQty('${id}', 1)">+</button>
         </div>
-        <button class="btn-remove-item" onclick="removeCartItem('${id}')" title="Удалить">&times;</button>
+        <button type="button" class="btn-remove-item" onclick="removeCartItem('${id}')">&times;</button>
       </div>
     `;
   }).join('');
@@ -314,24 +297,22 @@ window.removeCartItem = function(id) {
 };
 
 // ==========================================================================
-// 5. Отправка заказа на кухню
+// 5. Отправка заказа
 // ==========================================================================
 
 async function submitOrder() {
   if (!state.tableNumber) {
-    closeModal('cartModal');
-    openModal('tablePromptModal');
-    showToast('Укажите столик перед отправкой заказа!');
+    showToast('⚠️ Номер стола не найден в ссылке! Отсканируйте QR-код на столике.');
     return;
   }
 
-  const items = Object.values(state.cart).map(entry => ({
-    id: entry.item.id,
-    filename: entry.item.filename,
-    dish_name: entry.item.dish_name,
-    category: entry.item.category,
-    count: entry.count,
-    image_url: entry.item.image_url
+  const items = Object.values(state.cart).map(e => ({
+    id: e.item.id,
+    filename: e.item.filename,
+    dish_name: e.item.dish_name,
+    category: e.item.category,
+    count: e.count,
+    image_url: e.item.image_url
   }));
 
   if (items.length === 0) {
@@ -340,9 +321,9 @@ async function submitOrder() {
   }
 
   const submitBtn = document.getElementById('btnSubmitOrder');
-  const originalBtnHtml = submitBtn.innerHTML;
+  const origHtml = submitBtn.innerHTML;
   submitBtn.disabled = true;
-  submitBtn.innerHTML = `<span>Отправка заказа...</span>`;
+  submitBtn.innerHTML = `<span>Отправка заказа на кухню...</span>`;
 
   try {
     const res = await fetch('/api/order', {
@@ -355,39 +336,35 @@ async function submitOrder() {
     });
 
     const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.detail || 'Не удалось отправить заказ');
-    }
+    if (!res.ok) throw new Error(data.detail || 'Ошибка отправки');
 
     // Успех! Очищаем корзину
     state.cart = {};
     updateCartUI();
     closeModal('cartModal');
 
-    // Открываем модалку успеха
     document.getElementById('successTableNum').textContent = `№ ${state.tableNumber}`;
     openModal('orderSuccessModal');
 
   } catch (err) {
-    alert(`Ошибка отправки заказа: ${err.message}`);
+    alert(`Ошибка: ${err.message}`);
   } finally {
     submitBtn.disabled = false;
-    submitBtn.innerHTML = originalBtnHtml;
+    submitBtn.innerHTML = origHtml;
   }
 }
 
 // ==========================================================================
-// 6. Модальные окна и Lightbox
+// 6. Модальные окна
 // ==========================================================================
 
-function openModal(modalId) {
-  const el = document.getElementById(modalId);
+function openModal(id) {
+  const el = document.getElementById(id);
   if (el) el.classList.remove('hidden');
 }
 
-function closeModal(modalId) {
-  const el = document.getElementById(modalId);
+function closeModal(id) {
+  const el = document.getElementById(id);
   if (el) el.classList.add('hidden');
 }
 
@@ -406,116 +383,45 @@ function showToast(msg) {
   setTimeout(() => {
     t.classList.remove('show');
     setTimeout(() => t.classList.add('hidden'), 300);
-  }, 2500);
+  }, 2200);
 }
 
 // ==========================================================================
-// 7. Навешивание слушателей событий
+// 7. Инициализация при старте
 // ==========================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. Извлекаем столик из ссылки
-  state.tableNumber = parseTableFromUrl();
-  updateTableUI();
+  initTableNumber();
+  loadMenu();
 
-  // 2. Загружаем конфиг и блюда
-  fetchConfig();
-  fetchMenu();
-
-  // 3. Переключение категорий
-  const catButtons = document.querySelectorAll('.cat-pill');
-  catButtons.forEach(btn => {
+  // Фильтр категорий
+  document.querySelectorAll('.cat-pill').forEach(btn => {
     btn.addEventListener('click', () => {
-      catButtons.forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.activeCategory = btn.dataset.category;
       renderMenu();
     });
   });
 
-  // 4. Плавающая корзина и модалка корзины
-  document.getElementById('btnOpenCart').addEventListener('click', () => {
-    openModal('cartModal');
-  });
-
-  document.getElementById('btnCloseCart').addEventListener('click', () => {
-    closeModal('cartModal');
-  });
-
+  // Корзина
+  document.getElementById('btnOpenCart').addEventListener('click', () => openModal('cartModal'));
+  document.getElementById('btnCloseCart').addEventListener('click', () => closeModal('cartModal'));
   document.getElementById('btnSubmitOrder').addEventListener('click', submitOrder);
 
-  // 5. Ручной ввод столика (если нет в ссылке)
-  document.getElementById('btnManualTable').addEventListener('click', () => {
-    openModal('tablePromptModal');
-  });
+  // Успех
+  document.getElementById('btnCloseSuccess').addEventListener('click', () => closeModal('orderSuccessModal'));
 
-  document.getElementById('tableBadge').addEventListener('click', () => {
-    openModal('tablePromptModal');
-  });
-
-  document.getElementById('btnCloseTablePrompt').addEventListener('click', () => {
-    closeModal('tablePromptModal');
-  });
-
-  document.getElementById('btnSaveTableNumber').addEventListener('click', () => {
-    const input = document.getElementById('manualTableInput');
-    const val = input.value.trim();
-    if (val && /^\d+$/.test(val)) {
-      state.tableNumber = val;
-      updateTableUI();
-      closeModal('tablePromptModal');
-      showToast(`Столик № ${val} установлен`);
-    } else {
-      alert('Пожалуйста, введите корректный номер стола (число)');
-    }
-  });
-
-  // Быстрые кнопки столиков (1, 2, 3...)
-  document.querySelectorAll('.quick-table-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const val = btn.dataset.val;
-      state.tableNumber = val;
-      updateTableUI();
-      closeModal('tablePromptModal');
-      showToast(`Столик № ${val} установлен`);
-    });
-  });
-
-  // 6. Wi-Fi модалка
-  document.getElementById('wifiBadge').addEventListener('click', () => {
-    openModal('wifiModal');
-  });
-
-  document.getElementById('btnCloseWifiModal').addEventListener('click', () => {
-    closeModal('wifiModal');
-  });
-
-  document.getElementById('btnConfirmWifi').addEventListener('click', () => {
-    closeModal('wifiModal');
-  });
-
-  // 7. Модалка успешного заказа
-  document.getElementById('btnCloseSuccess').addEventListener('click', () => {
-    closeModal('orderSuccessModal');
-  });
-
-  // 8. Lightbox закрытие
-  document.getElementById('btnCloseLightbox').addEventListener('click', () => {
-    closeModal('photoLightbox');
-  });
-
+  // Lightbox
+  document.getElementById('btnCloseLightbox').addEventListener('click', () => closeModal('photoLightbox'));
   document.getElementById('photoLightbox').addEventListener('click', (e) => {
-    if (e.target.id === 'photoLightbox') {
-      closeModal('photoLightbox');
-    }
+    if (e.target.id === 'photoLightbox') closeModal('photoLightbox');
   });
 
-  // Закрытие модалок по клику на фон
+  // Закрытие по клику на фон
   document.querySelectorAll('.modal-backdrop').forEach(modal => {
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.classList.add('hidden');
-      }
+      if (e.target === modal) modal.classList.add('hidden');
     });
   });
 });

@@ -130,6 +130,11 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 def serve_index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
+# Support /1, /2, /3 etc. direct routes
+@app.get("/{table_id:int}")
+def serve_table(table_id: int):
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
 if __name__ == "__main__":
     import uvicorn
     cfg = load_config()

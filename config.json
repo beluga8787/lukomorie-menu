@@ -1,11 +1,11 @@
 {
     "telegram_bot_token": "9048397245:AAHV-pDgMODThOxLauJkNaxEaySH6KtOhkA",
-    "telegram_chat_id": "-5516632861",
+    "telegram_chat_id": "-1004486927484",
     "wifi_names": [
         "Лукоморие",
         "Лукоморие_5G"
     ],
-    "enforce_wifi_modal": true,
+    "enforce_wifi_modal": false,
     "port": 8000,
     "host": "0.0.0.0"
 }
