@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Лукоморье — Меню заведения</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Montserrat:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <!-- Decorative Wood & River Background Elements -->
+  <div class="bg-overlay"></div>
+  <div class="ambient-glow glow-blue"></div>
+  <div class="ambient-glow glow-wood"></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container header-content">
+      <div class="brand">
+        <div class="brand-emblem">
+          <svg viewBox="0 0 48 48" class="emblem-svg">
+            <circle cx="24" cy="24" r="22" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.4"/>
+            <!-- Stylized Oak Tree & Wave -->
+            <path d="M24 10 C20 10 17 13 17 17 C15 17 13 19 13 22 C13 25 15 27 18 28 L22 28 L22 36 L26 36 L26 28 L30 28 C33 27 35 25 35 22 C35 19 33 17 31 17 C31 13 28 10 24 10 Z" fill="currentColor" opacity="0.85"/>
+            <path d="M10 40 Q 17 36, 24 40 T 38 40" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">Лукоморье</h1>
+          <p class="brand-subtitle">Меню заведения</p>
+        </div>
+      </div>
+
+      <!-- Top Badges: Table Info & WiFi info -->
+      <div class="header-badges">
+        <div id="tableBadge" class="status-badge badge-warning" title="Номер столика">
+          <span class="badge-icon">🛎️</span>
+          <span class="badge-label">Стол: <b>не указан</b></span>
+        </div>
+        <div id="wifiBadge" class="status-badge badge-wifi" title="Подключение к сети">
+          <span class="wifi-indicator pulse"></span>
+          <span class="badge-text">Wi-Fi «Лукоморие»</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Table Alert Warning (If no table in URL) -->
+  <div id="noTableBanner" class="table-alert-banner">
+    <div class="container banner-inner">
+      <div class="banner-icon">⚠️</div>
+      <div class="banner-text">
+        <strong>Номер столика не определен!</strong>
+        <span>Пожалуйста, отсканируйте QR-код на вашем столике (или перейдите по ссылке с номером, например <code>/?1</code>), чтобы заказать блюда.</span>
+      </div>
+      <button id="btnManualTable" class="btn-text-action">Указать стол</button>
+    </div>
+  </div>
+
+  <!-- Categories Filter -->
+  <nav class="categories-nav">
+    <div class="container categories-container">
+      <div class="categories-scroll" id="categoriesBar">
+        <button class="cat-pill active" data-category="all">
+          <span class="cat-icon">🍽️</span>
+          <span class="cat-title">Все</span>
+        </button>
+        <button class="cat-pill" data-category="fish">
+          <span class="cat-icon">🐟</span>
+          <span class="cat-title">Рыбное</span>
+        </button>
+        <button class="cat-pill" data-category="meat">
+          <span class="cat-icon">🥩</span>
+          <span class="cat-title">Мясное</span>
+        </button>
+        <button class="cat-pill" data-category="other">
+          <span class="cat-icon">🥗</span>
+          <span class="cat-title">Прочее</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="menu-main">
+    <div class="container">
+      <!-- Loading State -->
+      <div id="loadingState" class="loading-state">
+        <div class="wood-spinner"></div>
+        <p>Загрузка меню «Лукоморье»...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="empty-state hidden">
+        <div class="empty-icon">🪵</div>
+        <h3>В этой категории пока нет блюд</h3>
+        <p>Поместите фотографии в папку <code>photos/</code> соответствующей категории</p>
+      </div>
+
+      <!-- Dishes Grid -->
+      <div id="menuGrid" class="dishes-grid"></div>
+    </div>
+  </main>
+
+  <!-- Floating Order Bar (Cart) -->
+  <div id="floatingCart" class="floating-cart">
+    <div class="cart-bar-content">
+      <div class="cart-info">
+        <div class="cart-icon-wrapper">
+          <svg viewBox="0 0 24 24" class="cart-svg">
+            <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z" fill="currentColor"/>
+          </svg>
+          <span id="cartCountBadge" class="cart-badge">0</span>
+        </div>
+        <div class="cart-text">
+          <div class="cart-heading">Ваш заказ</div>
+          <div id="cartSummary" class="cart-sub">0 позиций выбрано</div>
+        </div>
+      </div>
+      <button id="btnOpenCart" class="btn-primary cart-action-btn">
+        <span>Посмотреть</span>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Cart Modal Drawer -->
+  <div id="cartModal" class="modal-backdrop hidden">
+    <div class="modal-card cart-drawer">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Ваш заказ</h3>
+          <span id="modalTableBadge" class="table-pill">Стол № 1</span>
+        </div>
+        <button id="btnCloseCart" class="btn-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="cartItemsList" class="cart-items-list">
+          <!-- Filled dynamically -->
+        </div>
+
+        <div id="cartEmptyMessage" class="cart-empty hidden">
+          <div class="empty-icon">🍽️</div>
+          <p>В заказе пока ничего нет. Выберите аппетитные блюда из меню!</p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-total-row">
+          <span>Всего блюд:</span>
+          <strong id="modalTotalItems">0 шт.</strong>
+        </div>
+        <button id="btnSubmitOrder" class="btn-primary btn-block btn-lg">
+          <span class="btn-icon">🔔</span>
+          <span class="btn-text">Отправить заказ на кухню</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table Input Modal (If no table in URL) -->
+  <div id="tablePromptModal" class="modal-backdrop hidden">
+    <div class="modal-card small-modal">
+      <div class="modal-header">
+        <h3>Укажите ваш столик</h3>
+        <button id="btnCloseTablePrompt" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="prompt-text">Введите номер столика, за которым вы находитесь:</p>
+        <div class="table-input-wrap">
+          <span class="input-prefix">№</span>
+          <input type="number" id="manualTableInput" min="1" max="99" placeholder="1" autofocus>
+        </div>
+        <div class="table-quick-grid">
+          <button type="button" class="quick-table-btn" data-val="1">1</button>
+          <button type="button" class="quick-table-btn" data-val="2">2</button>
+          <button type="button" class="quick-table-btn" data-val="3">3</button>
+          <button type="button" class="quick-table-btn" data-val="4">4</button>
+          <button type="button" class="quick-table-btn" data-val="5">5</button>
+          <button type="button" class="quick-table-btn" data-val="6">6</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnSaveTableNumber" class="btn-primary btn-block">Сохранить столик</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wi-Fi Reminder Modal -->
+  <div id="wifiModal" class="modal-backdrop hidden">
+    <div class="modal-card small-modal">
+      <div class="modal-header">
+        <h3>📶 Сеть Wi-Fi заведения</h3>
+        <button id="btnCloseWifiModal" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="wifi-modal-icon">🌊🪵</div>
+        <p class="prompt-text">Для мгновенной отправки заказа на кухню подключитесь к гостевой сети ресторана «Лукоморье»:</p>
+        <div class="wifi-list">
+          <div class="wifi-item">
+            <span class="wifi-dot"></span>
+            <strong>Лукоморие</strong>
+          </div>
+          <div class="wifi-item">
+            <span class="wifi-dot"></span>
+            <strong>Лукоморие_5G</strong>
+          </div>
+        </div>
+        <p class="wifi-subtext">Пароль не требуется или уточняйте у персонала.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="btnConfirmWifi" class="btn-primary btn-block">Понятно, я в сети</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Success Modal -->
+  <div id="orderSuccessModal" class="modal-backdrop hidden">
+    <div class="modal-card small-modal success-card">
+      <div class="success-animation">
+        <div class="checkmark-circle">
+          <div class="checkmark draw"></div>
+        </div>
+      </div>
+      <h3 class="success-title">Заказ принят!</h3>
+      <p id="successMessage" class="success-desc">Ваш заказ передан на кухню. Повара уже приступили к приготовлению.</p>
+      <div class="success-table-box">
+        <span>Стол:</span>
+        <strong id="successTableNum">№ 1</strong>
+      </div>
+      <button id="btnCloseSuccess" class="btn-primary btn-block">Отлично</button>
+    </div>
+  </div>
+
+  <!-- Lightbox Photo Preview Modal -->
+  <div id="photoLightbox" class="lightbox-backdrop hidden">
+    <button id="btnCloseLightbox" class="lightbox-close">&times;</button>
+    <div class="lightbox-content">
+      <img id="lightboxImg" src="" alt="Фото блюда">
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
