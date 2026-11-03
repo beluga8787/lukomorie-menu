@@ -53,28 +53,19 @@ def send_telegram_order(config: dict, table_number: str, items: list) -> dict:
     # Calculate total items
     total_count = sum(item.get("count", 1) for item in items)
 
-    # Format message for Telegram
-    lines = [
-        "🪵 <b>РЕСТОРАН «ЛУКОМОРЬЕ»</b> 🌊",
-        "🔔 <b>НОВЫЙ ЗАКАЗ С САЙТА!</b>",
-        "━━━━━━━━━━━━━━━━━━",
-        f"📍 <b>Столик:</b> <code>№ {table_number}</code>",
-        f"⏰ <b>Время заказа:</b> {now_str}",
-        "━━━━━━━━━━━━━━━━━━",
-        "📋 <b>Состав заказа:</b>"
-    ]
+    # Format message strictly as requested:
+    # стол: (номер) (время)
+    # заказ: (заказы)
+    time_str = datetime.now().strftime("%H:%M")
+    
+    dish_list = []
+    for it in items:
+        name = it.get('dish_name') or format_dish_name(it.get('filename', 'Блюдо'))
+        cnt = it.get('count', 1)
+        dish_list.append(f"{name} ({cnt} шт.)")
 
-    for idx, it in enumerate(items, 1):
-        dish_name = it.get('dish_name') or format_dish_name(it.get('filename', 'Блюдо'))
-        category_key = it.get('category', 'other')
-        cat_badge = CATEGORY_NAMES.get(category_key, '🍽')
-        count = it.get('count', 1)
-        lines.append(f"  <b>{idx}.</b> {cat_badge} <b>{dish_name}</b> — <b>{count} шт.</b>")
-
-    lines.append("━━━━━━━━━━━━━━━━━━")
-    lines.append(f"📦 <b>Всего блюд:</b> {total_count} шт.")
-
-    message_text = "\n".join(lines)
+    dishes_text = ", ".join(dish_list)
+    message_text = f"стол: {table_number} ({time_str})\nзаказ: {dishes_text}"
 
     # Check if bot is configured
     if not bot_token or "YOUR_TELEGRAM" in bot_token or not chat_id or "YOUR_TELEGRAM" in chat_id:
