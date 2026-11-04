@@ -3,7 +3,7 @@ import sys
 import json
 import time
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Safe console output for Windows cp1251/866
 if sys.platform == 'win32':
@@ -40,10 +40,13 @@ def send_telegram_order(config: dict, table_number: str, items: list) -> dict:
     bot_token = config.get("telegram_bot_token", "").strip()
     chat_id = config.get("telegram_chat_id", "").strip()
 
-    now_str = datetime.now().strftime("%d.%m.%Y в %H:%M:%S")
+    tz_offset = config.get("timezone_offset_hours", 3)
+    tz = timezone(timedelta(hours=tz_offset))
+    now = datetime.now(tz)
+    now_str = now.strftime("%d.%m.%Y в %H:%M:%S")
 
     order_record = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now.isoformat(),
         "time_formatted": now_str,
         "table": table_number,
         "items": items
@@ -54,7 +57,7 @@ def send_telegram_order(config: dict, table_number: str, items: list) -> dict:
     total_count = sum(item.get("count", 1) for item in items)
 
     # Minimalist yet visually clear and aesthetic format
-    time_str = datetime.now().strftime("%H:%M")
+    time_str = now.strftime("%H:%M")
     
     dish_lines = []
     for it in items:

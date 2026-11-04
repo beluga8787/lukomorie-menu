@@ -7,8 +7,9 @@ CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 DEFAULT_CONFIG = {
     "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN_HERE",
     "telegram_chat_id": "YOUR_TELEGRAM_GROUP_CHAT_ID_HERE",
+    "timezone_offset_hours": 3,
     "wifi_names": ["Лукоморие", "Лукоморие_5G"],
-    "enforce_wifi_modal": True,
+    "enforce_wifi_modal": False,
     "port": 8000,
     "host": "0.0.0.0"
 }

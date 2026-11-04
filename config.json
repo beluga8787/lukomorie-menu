@@ -1,6 +1,7 @@
 {
     "telegram_bot_token": "9048397245:AAHV-pDgMODThOxLauJkNaxEaySH6KtOhkA",
     "telegram_chat_id": "-1004486927484",
+    "timezone_offset_hours": 3,
     "wifi_names": [
         "Лукоморие",
         "Лукоморие_5G"
